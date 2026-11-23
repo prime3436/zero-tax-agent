@@ -1231,13 +1231,6 @@ def main() -> None:
             [TeacherMode.SIMULATED.value, TeacherMode.AUTO.value, TeacherMode.GEMINI.value],
             index=0,
         )
-        gemini_key_input = st.text_input(
-            "Gemini API Key (optional, for gemini/auto)",
-            value=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "",
-            type="password",
-        )
-        if gemini_key_input.strip():
-            os.environ["GEMINI_API_KEY"] = gemini_key_input.strip()
         conf_thresh = st.slider("Free AI Safety Threshold", 0.50, 0.99, float(engine.config.confidence_threshold), 0.01)
         audit_rate = st.slider("Background Spot-Check Rate", 0.00, 1.00, float(engine.config.shadow_audit_rate), 0.01)
         engine.config.confidence_threshold = float(conf_thresh)
