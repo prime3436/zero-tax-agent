@@ -733,9 +733,15 @@ def _init_session() -> None:
             seed=42,
             sleep_on_simulated=False,
         )
-    if "dataset" not in st.session_state:
+    if (
+        "dataset" not in st.session_state
+        or not getattr(st.session_state.dataset, "train_stream", None)
+        or not isinstance(st.session_state.dataset.train_stream[0], SupportTicket)
+    ):
         st.session_state.dataset = generate_dataset(seed=42, main_count=200, holdout_count=50, drift_count=50)
-    if "ticket_lookup" not in st.session_state:
+        ds = st.session_state.dataset
+        st.session_state.ticket_lookup = {t.ticket_id: t for t in ds.all_tickets}
+    elif "ticket_lookup" not in st.session_state:
         ds = st.session_state.dataset
         st.session_state.ticket_lookup = {t.ticket_id: t for t in ds.all_tickets}
     if "stream_pos" not in st.session_state:

@@ -699,7 +699,12 @@ class ZeroTaxEngine:
         """Run a single ticket through the LangGraph StateGraph."""
         if ticket is None:
             raise TypeError("ticket cannot be None")
-        ticket_obj = ticket if isinstance(ticket, SupportTicket) else SupportTicket.model_validate(ticket)
+        if isinstance(ticket, SupportTicket):
+            ticket_obj = ticket
+        elif hasattr(ticket, "model_dump"):
+            ticket_obj = SupportTicket.model_validate(ticket.model_dump(mode="json"))
+        else:
+            ticket_obj = SupportTicket.model_validate(ticket)
         eff_audit = self.config.shadow_audit_rate if audit_rate is None else float(audit_rate)
 
         with self._lock:
