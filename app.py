@@ -703,7 +703,18 @@ textarea:focus {
 """
 
 
+def _sync_gemini_secret() -> None:
+    if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+        try:
+            secret_val = str(st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY") or "").strip()
+        except Exception:
+            secret_val = ""
+        if secret_val:
+            os.environ["GEMINI_API_KEY"] = secret_val
+
+
 def _init_session() -> None:
+    _sync_gemini_secret()
     if st.session_state.get("ui_version") != 2:
         st.session_state.ui_version = 2
         if "ticket_log" in st.session_state:
@@ -1217,9 +1228,16 @@ def main() -> None:
         auto_approve = st.toggle("Auto-Switch to Free AI (Auto-Pilot)", value=True)
         teacher_choice = st.selectbox(
             "Cloud AI Mode",
-            [TeacherMode.SIMULATED.value, TeacherMode.AUTO.value, TeacherMode.GEMINI.value, TeacherMode.OPENAI.value],
+            [TeacherMode.SIMULATED.value, TeacherMode.AUTO.value, TeacherMode.GEMINI.value],
             index=0,
         )
+        gemini_key_input = st.text_input(
+            "Gemini API Key (optional, for gemini/auto)",
+            value=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "",
+            type="password",
+        )
+        if gemini_key_input.strip():
+            os.environ["GEMINI_API_KEY"] = gemini_key_input.strip()
         conf_thresh = st.slider("Free AI Safety Threshold", 0.50, 0.99, float(engine.config.confidence_threshold), 0.01)
         audit_rate = st.slider("Background Spot-Check Rate", 0.00, 1.00, float(engine.config.shadow_audit_rate), 0.01)
         engine.config.confidence_threshold = float(conf_thresh)
@@ -1232,11 +1250,18 @@ def main() -> None:
         c_apply, c_reset = st.columns(2)
         if c_apply.button("Apply Settings", use_container_width=True):
             db_path = st.session_state.db_path
+            chosen_mode = TeacherMode(teacher_choice)
+            has_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+            if chosen_mode == TeacherMode.GEMINI and not has_key:
+                st.session_state.key_warning = "No GEMINI_API_KEY found. Falling back safely to Auto mode."
+                chosen_mode = TeacherMode.AUTO
+            else:
+                st.session_state.key_warning = ""
             engine.close()
             new_cfg = DistillerConfig(confidence_threshold=conf_thresh, shadow_audit_rate=audit_rate)
             st.session_state.engine = ZeroTaxEngine(
                 db_path=db_path,
-                teacher_mode=TeacherMode(teacher_choice),
+                teacher_mode=chosen_mode,
                 config=new_cfg,
                 seed=42,
                 sleep_on_simulated=False,
@@ -1247,7 +1272,11 @@ def main() -> None:
             st.session_state.pending_interrupt = None
             st.session_state.pending_remaining = []
             st.session_state.last_probe = None
+            st.session_state.active_action = "auto_200"
             st.rerun()
+
+        if st.session_state.get("key_warning"):
+            st.warning(st.session_state.key_warning)
 
         if c_reset.button("Reset All", use_container_width=True):
             _reset_session_state(engine)
@@ -1273,7 +1302,7 @@ def main() -> None:
         "</div>"
         '<div class="zt-env-pill">'
         f'<span>MODE <strong>{"AUTO-PILOT" if auto_approve else "MANUAL GATE"}</strong></span>'
-        f'<span>CLOUD <strong>{html.escape(teacher_choice.upper())}</strong></span>'
+        f'<span>CLOUD <strong>{html.escape(engine.teacher.active_backend.value.upper())}</strong></span>'
         f'<span>SAFETY <strong>{int(conf_thresh * 100)}%</strong></span>'
         "</div>"
         "</div>",
